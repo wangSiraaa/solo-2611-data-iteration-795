@@ -33,3 +33,7 @@ class ConflictError(PowerBillingError):
 
 class NotFoundError(PowerBillingError):
     """A referenced object does not exist."""
+
+
+class AuditError(ValidationError):
+    """A metering-audit topology, case, check, or archive file is malformed."""

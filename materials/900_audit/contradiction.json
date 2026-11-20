@@ -1,0 +1,51 @@
+{
+  "scenario_id": "measured_contradiction",
+  "case": {
+    "case_id": "CASE-CONTRA",
+    "period": [0, 60],
+    "deviation_power": 1
+  },
+  "topology": {
+    "topology_id": "FEEDER-CONTRA",
+    "revision": "t1",
+    "epochs": [
+      {
+        "epoch_id": "E0",
+        "start": 0,
+        "end": 60,
+        "nodes": [
+          {"id": "R",  "parent": null, "kind": "branch", "total_meter": "Qroot"},
+          {"id": "P1", "parent": "R",  "kind": "branch", "total_meter": "Q1"},
+          {"id": "P2", "parent": "R",  "kind": "branch", "total_meter": "Q2"},
+          {"id": "a",  "parent": "P1", "kind": "leaf"},
+          {"id": "b",  "parent": "P1", "kind": "leaf"},
+          {"id": "c",  "parent": "P2", "kind": "leaf"},
+          {"id": "d",  "parent": "P2", "kind": "leaf"}
+        ]
+      }
+    ]
+  },
+  "readings": {
+    "revision": "r1",
+    "meters": {
+      "Qroot": [{"start": 0, "end": 60, "power": 1}],
+      "Q1":    [{"start": 0, "end": 60, "power": 1}],
+      "Q2":    [{"start": 0, "end": 60, "power": "1/2"}],
+      "a":     [{"start": 0, "end": 60, "power": 0}],
+      "b":     [{"start": 0, "end": 60, "power": 0}],
+      "c":     [{"start": 0, "end": 60, "power": 0}],
+      "d":     [{"start": 0, "end": 60, "power": 0}]
+    }
+  },
+  "checks": [
+    {"check_id": "Xroot", "branch": "Qroot", "period": [0, 60]},
+    {"check_id": "Xbad",  "branch": "Q2",    "period": [0, 60]}
+  ],
+  "archives": {
+    "files": [
+      {"file_no": 1, "cost": 1, "leaves": ["a", "b"]},
+      {"file_no": 2, "cost": 1, "leaves": ["c", "d"]}
+    ]
+  },
+  "strategies": []
+}

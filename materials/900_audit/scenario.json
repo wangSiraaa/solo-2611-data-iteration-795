@@ -1,0 +1,56 @@
+{
+  "scenario_id": "main_hour",
+  "case": {
+    "case_id": "CASE-MAIN",
+    "period": [0, 60],
+    "deviation_power": 1
+  },
+  "topology": {
+    "topology_id": "FEEDER-MAIN",
+    "revision": "t1",
+    "epochs": [
+      {
+        "epoch_id": "E0",
+        "start": 0,
+        "end": 60,
+        "nodes": [
+          {"id": "R",  "parent": null, "kind": "branch", "total_meter": "Mroot"},
+          {"id": "P1", "parent": "R",  "kind": "branch", "total_meter": "M1"},
+          {"id": "P2", "parent": "R",  "kind": "branch", "total_meter": "M2"},
+          {"id": "a",  "parent": "P1", "kind": "leaf"},
+          {"id": "b",  "parent": "P1", "kind": "leaf"},
+          {"id": "c",  "parent": "P2", "kind": "leaf"},
+          {"id": "d",  "parent": "P2", "kind": "leaf"}
+        ]
+      }
+    ]
+  },
+  "readings": {
+    "revision": "r1",
+    "meters": {
+      "Mroot": [{"start": 0, "end": 60, "power": 1}],
+      "M1":    [{"start": 0, "end": 60, "power": 1}],
+      "M2":    [{"start": 0, "end": 60, "power": 0}],
+      "a":     [{"start": 0, "end": 60, "power": 0}],
+      "b":     [{"start": 0, "end": 60, "power": 0}],
+      "c":     [{"start": 0, "end": 60, "power": 0}],
+      "d":     [{"start": 0, "end": 60, "power": 0}]
+    }
+  },
+  "checks": [
+    {"check_id": "Xroot", "branch": "Mroot", "period": [0, 60]},
+    {"check_id": "Xab",   "branch": "M1",    "period": [0, 60]}
+  ],
+  "archives": {
+    "files": [
+      {"file_no": 1, "cost": 1, "leaves": ["a", "b"]},
+      {"file_no": 2, "cost": 1, "leaves": ["a"]},
+      {"file_no": 3, "cost": 1, "leaves": ["c"]}
+    ]
+  },
+  "strategies": [
+    {"name": "all4_all_open", "checks": ["Xroot"]},
+    {"name": "all4_without_G", "checks": ["Xroot"], "open_files": [2, 3]},
+    {"name": "ab_after_branch_check", "checks": ["Xroot", "Xab"]}
+  ]
+}

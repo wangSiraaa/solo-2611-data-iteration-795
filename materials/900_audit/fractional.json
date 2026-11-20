@@ -1,0 +1,77 @@
+{
+  "scenario_id": "midmove_fractional_and_revision",
+  "case": {
+    "case_id": "CASE-FRAC",
+    "period": [0, 60],
+    "deviation_power": 1
+  },
+  "topology": {
+    "topology_id": "FEEDER-FRAC",
+    "revision": "t1",
+    "epochs": [
+      {
+        "epoch_id": "E0",
+        "start": 0,
+        "end": "25/2",
+        "nodes": [
+          {"id": "R",  "parent": null,  "kind": "branch", "total_meter": "Nroot"},
+          {"id": "P1", "parent": "R",   "kind": "branch", "total_meter": "N1"},
+          {"id": "P2", "parent": "R",   "kind": "branch", "total_meter": "N2"},
+          {"id": "a",  "parent": "P1",  "kind": "leaf"},
+          {"id": "b",  "parent": "P1",  "kind": "leaf"},
+          {"id": "c",  "parent": "P2",  "kind": "leaf"},
+          {"id": "d",  "parent": "P2",  "kind": "leaf"}
+        ]
+      },
+      {
+        "epoch_id": "E1",
+        "start": "25/2",
+        "end": 60,
+        "nodes": [
+          {"id": "R",  "parent": null,  "kind": "branch", "total_meter": "Nroot"},
+          {"id": "P1", "parent": "R",   "kind": "branch", "total_meter": "N1"},
+          {"id": "P2", "parent": "R",   "kind": "branch", "total_meter": "N2"},
+          {"id": "a",  "parent": "P2",  "kind": "leaf"},
+          {"id": "b",  "parent": "P1",  "kind": "leaf"},
+          {"id": "c",  "parent": "P2",  "kind": "leaf"},
+          {"id": "d",  "parent": "P2",  "kind": "leaf"}
+        ]
+      }
+    ]
+  },
+  "readings": {
+    "revision": "r1",
+    "meters": {
+      "Nroot": [{"start": 0, "end": 60, "power": 1}],
+      "N1":    [{"start": "25/2", "end": 60, "power": 0}],
+      "N2":    [{"start": 0, "end": "25/2", "power": 0},
+                {"start": "25/2", "end": 60, "power": 1}],
+      "a":     [{"start": 0, "end": 60, "power": 0}],
+      "b":     [{"start": 0, "end": 60, "power": 0}],
+      "c":     [{"start": 0, "end": 60, "power": 0}],
+      "d":     [{"start": 0, "end": 60, "power": 0}]
+    }
+  },
+  "readings_revision_to": {
+    "revision": "r2",
+    "meters": {
+      "N1": [{"start": 0, "end": "25/2", "power": 1},
+             {"start": "25/2", "end": 60, "power": 0}]
+    }
+  },
+  "checks": [
+    {"check_id": "Xroot", "branch": "Nroot", "period": [0, 60]},
+    {"check_id": "Xp1",   "branch": "N1",    "period": [0, 60]}
+  ],
+  "archives": {
+    "files": [
+      {"file_no": 1, "cost": 1, "leaves": ["a"]},
+      {"file_no": 2, "cost": 1, "leaves": ["b"]},
+      {"file_no": 3, "cost": 1, "leaves": ["c"]},
+      {"file_no": 4, "cost": 1, "leaves": ["d"]}
+    ]
+  },
+  "strategies": [
+    {"name": "after_revision", "checks": ["Xroot", "Xp1"]}
+  ]
+}

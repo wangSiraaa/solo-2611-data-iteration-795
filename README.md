@@ -3,23 +3,30 @@
 Python 3.11, standard library only (`fractions`, `sqlite3`). All arithmetic is
 exact rational arithmetic; JSON floats are rejected rather than coerced.
 
-Two independent layers:
+Three independent layers:
 
 | layer | module | responsibility |
 |-------|--------|----------------|
 | power / demand | `power_billing/interval.py`, `demand.py`, `power.py` | exact interval products, revisioned trajectories, demand search, target-charge products |
 | billing ledger | `power_billing/ledger.py` | immutable posted bills, append-only entries, linear correction chain, current head |
+| offline metering audit | `power_billing/audit.py` | branch-check candidate narrowing, missing-evidence ranges, min-worst-cost archive strategy |
 
 The layers are intentionally independent: a *target product* is a pure function
 of `(contract, power trajectory)`; the ledger never recomputes demand. A power
 correction changes only which target products are valid — **it never books
 money.** Money moves only through an explicit `post_target`.
 
+The audit layer is fully orthogonal to the billing layers: it reads archived
+synthetic meter data, books nothing, and never touches the ledger. The original
+bill and single-trajectory interfaces are unchanged.
+
 ## Run
 
 ```bash
 python3 -m power_billing.cli materials/735          # replay the material ops
-python3 -m unittest discover -s tests -v            # 36 tests
+python3 -m power_billing.audit_cli materials/900_audit/scenario.json       # audit + strategy
+python3 -m power_billing.audit_cli materials/900_audit/fractional.json --json
+python3 -m unittest discover -s tests -v            # 68 tests
 python3 materials/735/bill_reader.py bill.json      # read a demand-bill/v1 doc
 ```
 
@@ -179,3 +186,84 @@ idempotent replay, conflicting id reuse, and reopening a file database.
 | two connections, one winner | `test_only_one_concurrent_correction_wins` |
 | reopen persisted database | `test_reopening_a_database_preserves_state` |
 | scale (1000 seg / 200 contracts / 500 bills) | `test_1000_segments_200_contracts_500_bills` |
+
+## Layer 4 — offline metering audit
+
+`power_billing/audit.py` is a self-contained layer over archived data. It is
+not used by the billing engine. Run the worked examples with
+`python3 -m power_billing.audit_cli materials/900_audit/<file>.json`
+(add `--json` for the full report, or `--strategy NAME --candidates a,b,...
+--open-files 1,2` for an ad-hoc strategy query).
+
+### Candidate narrowing (part A)
+
+A case fixes a period `[a,b)` and a positive deviation power `d`; exactly one
+leaf under-records by `d` for the whole case. A **branch check** names a branch
+total meter and a period. The *measured difference* is the total meter energy
+minus the energy of the leaves that truly belong to that branch, split at every
+topology epoch (a leaf may be re-tapped at an epoch boundary while keeping its
+identity). For each candidate leaf `L` the **predicted difference** is
+`d × (time L belongs to the checked branch within the check period)`; a leaf
+that moves out half-way therefore gets a *fractional* predicted difference.
+
+A check is a **constraint** only when the total meter and every at-the-time
+leaf meter are fully known over the period; otherwise it lists the missing
+ranges (`no_reading`, `gap`, `branch_absent`, `no_topology`) and constrains
+nothing. A constraint keeps the candidates whose predicted difference equals
+the measured difference. Reports carry, per check, the measured difference,
+every predicted difference, and any missing ranges; the outcome is one of:
+
+* `unique` — exactly one leaf remains;
+* `contradiction` — the constraints empty the set (measurements cannot be
+  explained by a single biased leaf); the emptying check explains why;
+* `multiple` — several leaves remain (including the no-complete-check case).
+
+`readings_revision_to` merges meter overrides onto the current readings and
+re-runs the audit, so a meter revision (e.g. filling a gap) is visibly adopted:
+`materials/900_audit/fractional.json` goes from `multiple` (branch check is
+missing evidence) to `unique` once revision `r2` supplies the gap.
+
+### Archive strategy (part B)
+
+Each sealed review file is a leaf set with a positive integer cost and answers
+"is the true leaf in this set?". `optimal_strategy(candidates, files, ...)`
+computes an **adaptive** read plan — each next file may depend on earlier
+answers — minimising the worst-case total cost; among equal-cost choices the
+smallest file number is read first. It returns the worst cost, the first file,
+and the full yes/no decision tree. If some candidates answer *every* open file
+identically they are reported as an indistinguishable class, `identifiable` is
+`False`, and no location is claimed. `open_files` restricts the readable files,
+so the same candidates can be re-planned against a different open-file list.
+Limits: at most 10 candidates and 12 open files.
+
+### Worked examples (materials/900_audit)
+
+* `scenario.json` — a,b,c,d all report 0 for an hour, root total reports 1,
+  `d=1`. The root check matches all four; the branch meter M1 (covering a,b)
+  narrows to `{a,b}`. With `G={a,b}, A={a}, C={c}` all open, worst cost is 2 and
+  the first read is G (file 1); closing G leaves b and d indistinguishable;
+  after the M1 check only A (file 2) is needed (worst cost 1).
+* `fractional.json` — a moves out of branch N1 at `t=25/2`, giving `a` a
+  predicted difference of `25/2`. Before revision the N1 check is missing
+  evidence; after revision `r2` the check becomes a constraint and the audit is
+  unique on `a`.
+* `contradiction.json` — a bad branch reading matches no leaf; the audit reports
+  `contradiction`, distinct from missing evidence, with an explanation.
+
+| requirement | test |
+|---|---|
+| measured minus at-the-time leaves, split across epochs | `test_temporal_split_and_predicted_duration` |
+| fractional predicted difference on mid-period move | `test_fractional_predicted_difference` |
+| check usable only when total+leaves complete, else missing ranges | `test_initial_branch_check_is_missing_evidence`, `test_missing_total_meter_is_missing_evidence`, `test_check_outside_topology_lists_no_topology_range` |
+| unique / contradiction / multiple are distinct | `test_branch_check_narrows_to_a_b`, `test_contradiction_when_no_leaf_matches`, `test_distinct_from_missing_evidence` |
+| no-match is still explained | `test_no_match_is_explained` |
+| root keeps all four; branch narrows to a,b | `test_root_check_keeps_all_four`, `test_branch_check_narrows_to_a_b` |
+| min-worst-cost, first read G, worst 2 | `test_strategy_all_open_starts_with_G_worst_two`, `test_example_worst_cost_two_first_G` |
+| tie → smallest file number | `test_tie_breaks_to_smallest_file_number` |
+| closing G → b,d indistinguishable | `test_closing_G_makes_b_and_d_indistinguishable`, `test_all_identical_answers_is_indistinguishable` |
+| after branch check only A needed | `test_after_branch_check_only_A_needed` |
+| same candidates, different open-file list | `test_open_file_restriction_changes_result` |
+| revision adopted, result changes | `test_revision_is_adopted_and_narrows_to_a` |
+| leaf identity stable across epochs | `test_same_leaf_identity_across_epochs` |
+| 10-leaf / 12-file limits; integer costs | `test_limits_enforced`, `test_costs_parsed_and_integer_only` |
+| floats rejected; topology invariants | `test_float_rejected`, `test_leaf_set_must_be_stable`, `test_single_root_required`, `test_leaf_cannot_have_children` |
